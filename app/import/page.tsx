@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import type { Collection } from "@/lib/types";
+import { searchPlace } from "@/lib/geoapify";
 
 const categories = [
   "Restaurant",
@@ -53,88 +54,6 @@ function makeShareToken() {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 12);
   }
   return Math.random().toString(36).substring(2, 14);
-}
-
-function autoAssignCategory(osmClass: string, osmType: string): Category {
-  const c = osmClass.toLowerCase();
-  const t = osmType.toLowerCase();
-
-  if (c === "amenity") {
-    if (t === "restaurant" || t === "fast_food" || t === "food_court") return "Restaurant";
-    if (t === "cafe") return "Cafe";
-    if (t === "bar" || t === "pub" || t === "biergarten") return "Bar";
-    if (t === "winery") return "Winery";
-    if (t === "brewery") return "Brewery";
-    if (t === "street_food" || t === "marketplace" || t === "market") return "Street Food/Market";
-    if (t === "spa" || t === "public_bath") return "Spa/Wellness";
-  }
-  if (c === "tourism") {
-    if (t === "hotel" || t === "motel" || t === "guest_house" || t === "hostel") return "Hotel";
-    if (t === "museum") return "Museum";
-    if (t === "viewpoint") return "Viewpoint/Lookout";
-    if (t === "camp_site" || t === "caravan_site") return "Camping";
-    if (t === "gallery") return "Art Gallery";
-    if (t === "attraction" || t === "theme_park") return "Tour/Experience";
-  }
-  if (c === "leisure") {
-    if (t === "park" || t === "garden") return "Park/Garden";
-    if (t === "escape_game") return "Escape Room";
-  }
-  if (c === "natural") {
-    if (t === "beach" || t === "sand") return "Beach";
-    if (t === "waterfall") return "Waterfall";
-    if (t === "wood" || t === "forest") return "Forest";
-  }
-  if (c === "historic") {
-    if (t === "archaeological_site") return "Archaeology";
-    return "Historical Site";
-  }
-  if (c === "shop") {
-    if (t === "boutique" || t === "clothes" || t === "fashion") return "Boutique";
-    return "Market";
-  }
-
-  // Text fallbacks based on type or keywords
-  if (t.includes("restaurant") || t.includes("food")) return "Restaurant";
-  if (t.includes("cafe") || t.includes("coffee")) return "Cafe";
-  if (t.includes("bar") || t.includes("pub") || t.includes("wine") || t.includes("beer")) return "Bar";
-  if (t.includes("hotel") || t.includes("hostel") || t.includes("stay") || t.includes("lodging")) return "Hotel";
-  if (t.includes("museum") || t.includes("gallery")) return "Museum";
-  if (t.includes("park") || t.includes("garden")) return "Park/Garden";
-  if (t.includes("beach")) return "Beach";
-  if (t.includes("hike") || t.includes("trail") || t.includes("path")) return "Hiking Trail";
-
-  return "Other";
-}
-
-async function searchOSMItaly(name: string) {
-  try {
-    const searchUrl = new URL("https://nominatim.openstreetmap.org/search");
-    searchUrl.searchParams.set("q", `${name} Italy`);
-    searchUrl.searchParams.set("format", "jsonv2");
-    searchUrl.searchParams.set("limit", "1");
-
-    const response = await fetch(searchUrl.toString(), {
-      headers: {
-        "User-Agent": "TravelMapItalyImporter/1.0",
-      },
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.length > 0) {
-        return {
-          class: data[0].class || "",
-          type: data[0].type || "",
-          lat: Number(data[0].lat),
-          lng: Number(data[0].lon),
-        };
-      }
-    }
-  } catch (error) {
-    console.error("OSM search error for:", name, error);
-  }
-  return null;
 }
 
 export default function ImportPage() {
@@ -253,7 +172,7 @@ export default function ImportPage() {
         return next;
       });
 
-      const data = await searchOSMItaly(places[i].name);
+      const data = await searchPlace(places[i].name, "Italy");
 
       setPlaces((prev) => {
         const next = [...prev];
@@ -261,7 +180,7 @@ export default function ImportPage() {
           if (data) {
             next[i].lat = data.lat;
             next[i].lng = data.lng;
-            next[i].category = autoAssignCategory(data.class, data.type);
+            next[i].category = data.category as Category;
             next[i].status = "found";
           } else {
             next[i].status = "not_found";

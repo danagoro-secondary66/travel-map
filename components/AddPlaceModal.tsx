@@ -5,6 +5,7 @@ import Tesseract from "tesseract.js";
 import { extractPlaceFromImage, QuotaExceededError } from "@/lib/gemini";
 import { supabase } from "@/lib/supabase";
 import type { Place } from "@/lib/types";
+import { searchPlace } from "@/lib/geoapify";
 
 type AddPlaceModalProps = {
   isOpen: boolean;
@@ -14,15 +15,14 @@ type AddPlaceModalProps = {
 
 type TabKey = "search" | "screenshot" | "manual";
 
-type NominatimResult = {
+type Category = (typeof categories)[number];
+
+type SearchResult = {
   display_name: string;
   lat: string;
   lon: string;
+  category?: string;
   osm_id?: number;
-  type?: string;
-  extratags?: {
-    opening_hours?: string;
-  };
 };
 
 type DraftPlace = {
@@ -94,39 +94,18 @@ function extractShortName(displayName: string) {
   return displayName.split(",")[0]?.trim() || displayName;
 }
 
-function createDraftFromResult(result: NominatimResult): DraftPlace {
+function createDraftFromResult(result: SearchResult): DraftPlace {
   return {
     name: extractShortName(result.display_name),
     lat: result.lat,
     lng: result.lon,
-    category: "Other",
+    category: (result.category as Category) || "Other",
     customCategory: "",
     notes: "",
     visited: false,
-    openingHours: result.extratags?.opening_hours ?? null,
+    openingHours: null,
     osmId: result.osm_id ? String(result.osm_id) : null,
   };
-}
-
-async function searchNominatim(query: string) {
-  const url = new URL("https://nominatim.openstreetmap.org/search");
-  url.searchParams.set("q", query);
-  url.searchParams.set("format", "jsonv2");
-  url.searchParams.set("limit", "8");
-  url.searchParams.set("addressdetails", "1");
-  url.searchParams.set("extratags", "1");
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("Search failed");
-  }
-
-  return (await response.json()) as NominatimResult[];
 }
 
 function readFileAsDataUrl(file: File) {
@@ -154,7 +133,7 @@ export default function AddPlaceModal({
 }: AddPlaceModalProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("search");
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<NominatimResult[]>([]);
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [ocrText, setOcrText] = useState("");
@@ -227,10 +206,18 @@ export default function AddPlaceModal({
     setSearchError("");
 
     try {
-      const results = await searchNominatim(query);
-      setSearchResults(results);
-
-      if (results.length === 0) {
+      const result = await searchPlace(query);
+      if (result) {
+        setSearchResults([
+          {
+            display_name: result.displayName,
+            lat: String(result.lat),
+            lon: String(result.lng),
+            category: result.category,
+          },
+        ]);
+      } else {
+        setSearchResults([]);
         setSearchError("No places found. Try a more specific name.");
       }
     } catch {
