@@ -69,6 +69,7 @@ const categories = [
   "Hotel",
   "Airbnb/Rental",
   "Camping",
+  "Activities",
   "Other",
 ] as const;
 

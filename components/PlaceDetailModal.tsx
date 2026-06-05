@@ -46,6 +46,7 @@ const categories = [
   "Hotel",
   "Airbnb/Rental",
   "Camping",
+  "Activities",
   "Other",
 ] as const;
 
@@ -75,6 +76,7 @@ const categoryEmoji: Record<string, string> = {
   Hotel: "🏨",
   "Airbnb/Rental": "🏠",
   Camping: "⛺",
+  Activities: "🎬",
   Other: "📍",
 };
 

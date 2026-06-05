@@ -45,6 +45,7 @@ const categoryEmoji: Record<string, string> = {
   Hotel: "🏨",
   "Airbnb/Rental": "🏠",
   Camping: "⛺",
+  Activities: "🎬",
   Other: "📍",
 };
 
