@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import AddPlaceModal from "@/components/AddPlaceModal";
 import CollectionsModal from "@/components/CollectionsModal";
 import PlaceDetailModal from "@/components/PlaceDetailModal";
@@ -105,13 +106,21 @@ export default function Home() {
     <main className="flex min-h-screen flex-col bg-[#f5efdf] text-slate-900">
       <header className="sticky top-0 z-[1000] border-b border-black/5 bg-[#f5efdf]/95 px-4 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur">
         <div className="mx-auto flex max-w-5xl flex-col gap-3">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">
-              Travel Map
-            </p>
-            <h1 className="text-xl font-semibold tracking-tight">
-              Save places worth coming back to
-            </h1>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-700">
+                Travel Map
+              </p>
+              <h1 className="text-xl font-semibold tracking-tight">
+                Save places worth coming back to
+              </h1>
+            </div>
+            <Link
+              href="/import"
+              className="rounded-full bg-white/70 px-3.5 py-1.5 text-xs font-semibold text-slate-700 ring-1 ring-slate-200 transition hover:bg-white hover:text-slate-900"
+            >
+              Import places
+            </Link>
           </div>
 
           {placesError ? (
