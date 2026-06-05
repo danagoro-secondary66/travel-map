@@ -123,6 +123,91 @@ export function fallbackCategoryByName(name: string, category: string): string {
   return "Other";
 }
 
+async function getGeminiCategoryFallback(name: string, country: string): Promise<string> {
+  const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY?.trim();
+  if (!apiKey) return "Other";
+
+  try {
+    const prompt = `What type of place is '${name}' in ${country}? Reply with exactly one word from this list: Restaurant, Cafe, Bar, Winery, Hotel, Museum, HistoricalSite, Park, Waterfall, Beach, Market, Activities, Camping, Spa, Other. Only reply with the word, nothing else.`;
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }]
+            }
+          ]
+        })
+      }
+    );
+
+    if (response.ok) {
+      const payload = await response.json();
+      const rawText = payload.candidates?.[0]?.content?.parts
+        ?.map((part: any) => part.text?.trim() ?? "")
+        .join(" ")
+        .trim();
+
+      if (rawText) {
+        // Strip code block and punctuation
+        const cleanWord = rawText
+          .replace(/^```[\w-]*\s*|\s*```$/g, "")
+          .trim()
+          .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+
+        const normalizedWord = cleanWord.toLowerCase();
+        if (normalizedWord === "historicalsite") return "Historical Site";
+        if (normalizedWord === "spa") return "Spa/Wellness";
+        if (normalizedWord === "park") return "Park/Garden";
+
+        const appCategories = [
+          "Restaurant",
+          "Cafe",
+          "Bar",
+          "Winery",
+          "Brewery",
+          "Street Food/Market",
+          "Waterfall",
+          "Beach",
+          "Hiking Trail",
+          "Viewpoint/Lookout",
+          "Park/Garden",
+          "Forest",
+          "Museum",
+          "Historical Site",
+          "Art Gallery",
+          "Archaeology",
+          "Escape Room",
+          "Extreme Sports",
+          "Spa/Wellness",
+          "Tour/Experience",
+          "Market",
+          "Boutique",
+          "Hotel",
+          "Airbnb/Rental",
+          "Camping",
+          "Activities",
+          "Other"
+        ];
+
+        const matched = appCategories.find(cat => cat.toLowerCase() === normalizedWord);
+        if (matched) {
+          return matched;
+        }
+      }
+    }
+  } catch (err) {
+    console.error("Gemini category fallback failed:", err);
+  }
+  return "Other";
+}
+
 function autoAssignOSMCategory(osmClass: string, osmType: string): string {
   const c = osmClass.toLowerCase();
   const t = osmType.toLowerCase();
@@ -175,7 +260,7 @@ function autoAssignOSMCategory(osmClass: string, osmType: string): string {
   return "Other";
 }
 
-async function searchNominatimFallback(name: string, countryHint?: string): Promise<GeoapifyResult | null> {
+async function searchNominatimFallback(name: string, countryHint?: string, countryCode?: string): Promise<GeoapifyResult | null> {
   try {
     const query = countryHint ? `${name} ${countryHint}` : name;
     const url = new URL("https://nominatim.openstreetmap.org/search");
@@ -183,6 +268,9 @@ async function searchNominatimFallback(name: string, countryHint?: string): Prom
     url.searchParams.set("format", "jsonv2");
     url.searchParams.set("limit", "1");
     url.searchParams.set("addressdetails", "1");
+    if (countryCode) {
+      url.searchParams.set("countrycodes", countryCode.toLowerCase());
+    }
 
     const response = await fetch(url.toString(), {
       headers: {
@@ -209,13 +297,20 @@ async function searchNominatimFallback(name: string, countryHint?: string): Prom
   return null;
 }
 
-export async function searchPlace(name: string, countryHint?: string): Promise<GeoapifyResult | null> {
+export async function searchPlace(
+  name: string,
+  countryHint?: string,
+  countryCode?: string
+): Promise<GeoapifyResult | null> {
   const apiKey = process.env.NEXT_PUBLIC_GEOAPIFY_API_KEY;
 
   if (apiKey && apiKey.trim().length > 0) {
     try {
       const query = countryHint ? `${name} ${countryHint}` : name;
-      const url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(query)}&format=json&limit=1&apiKey=${apiKey}`;
+      let url = `https://api.geoapify.com/v1/geocode/search?text=${encodeURIComponent(query)}&format=json&limit=1&apiKey=${apiKey}`;
+      if (countryCode) {
+        url += `&filter=countrycode:${countryCode.toLowerCase()}&bias=countrycode:${countryCode.toLowerCase()}`;
+      }
 
       const response = await fetch(url);
       if (response.ok) {
@@ -229,6 +324,9 @@ export async function searchPlace(name: string, countryHint?: string): Promise<G
           if (category === "Other") {
             category = fallbackCategoryByName(displayName, result.category || "");
           }
+          if (category === "Other" && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+            category = await getGeminiCategoryFallback(name, countryHint || "Italy");
+          }
 
           return { lat, lng, category, displayName };
         }
@@ -239,9 +337,12 @@ export async function searchPlace(name: string, countryHint?: string): Promise<G
   }
 
   // Fallback to Nominatim if key is empty or call yields no results
-  const res = await searchNominatimFallback(name, countryHint);
+  const res = await searchNominatimFallback(name, countryHint, countryCode);
   if (res && res.category === "Other") {
     res.category = fallbackCategoryByName(res.displayName, "");
+    if (res.category === "Other" && process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+      res.category = await getGeminiCategoryFallback(name, countryHint || "Italy");
+    }
   }
   return res;
 }

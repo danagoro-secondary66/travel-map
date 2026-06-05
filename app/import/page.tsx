@@ -57,6 +57,15 @@ function makeShareToken() {
   return Math.random().toString(36).substring(2, 14);
 }
 
+function cleanCollectionName(name: string): string {
+  if (!name) return "";
+  // Strip emojis / wide characters (preserving Hebrew and standard characters)
+  let cleaned = name.replace(/[\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, '');
+  cleaned = cleaned.replace(/[^\x00-\x7F\u0590-\u05FF\s]/g, ""); // Keep ASCII + Hebrew + whitespace
+  cleaned = cleaned.replace(/\s+/g, " ");
+  return cleaned.trim();
+}
+
 export default function ImportPage() {
   const [collections, setCollections] = useState<Collection[]>([]);
   const [selectedCollectionId, setSelectedCollectionId] = useState<string>("none");
@@ -162,6 +171,18 @@ export default function ImportPage() {
     setIsSearching(true);
     isCanceledRef.current = false;
 
+    // Get collection name context hint
+    let collectionName = "";
+    if (selectedCollectionId === "new") {
+      collectionName = newCollectionName.trim();
+    } else if (selectedCollectionId !== "none") {
+      const col = collections.find((c) => c.id === selectedCollectionId);
+      if (col) {
+        collectionName = col.name;
+      }
+    }
+    const contextHint = cleanCollectionName(collectionName);
+
     for (let i = 0; i < places.length; i++) {
       if (isCanceledRef.current) break;
       if (!places[i].checked) continue;
@@ -173,7 +194,15 @@ export default function ImportPage() {
         return next;
       });
 
-      const data = await searchPlace(places[i].name, "Italy");
+      // Construct search query
+      let query = places[i].name;
+      if (contextHint) {
+        if (!query.toLowerCase().includes(contextHint.toLowerCase())) {
+          query = `${query} ${contextHint}`;
+        }
+      }
+
+      const data = await searchPlace(query, "Italy", "it");
 
       setPlaces((prev) => {
         const next = [...prev];
